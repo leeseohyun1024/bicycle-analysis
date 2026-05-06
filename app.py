@@ -1,122 +1,87 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
-import os
 import plotly.express as px
 
-# 1. 페이지 설정 (제목과 아이콘)
-st.set_page_config(page_title="서울시 따릉이 분석 대시보드", layout="wide")
+# 페이지 설정
+st.set_page_config(page_title="자전거 대여 데이터 분석", layout="wide")
 
-# 2. 데이터베이스 존재 여부 확인 및 에러 메시지
-DB_PATH = "bicycle.db"
+st.title("🚲 자전거 대여 데이터 분석 리포트")
 
-if not os.path.exists(DB_PATH):
-    st.error("⚠️ 'bicycle.db' 파일을 찾을 수 없습니다!")
-    st.info("파일이 'app.py'와 같은 폴더에 있는지 확인해 주세요. 파일명이 정확히 'bicycle.db'여야 합니다.")
-    st.stop()
+# --- 데이터 로드 (사용자의 환경에 맞게 수정 필요) ---
+# @st.cache_data
+# def load_data():
+#     df = pd.read_csv('your_data.csv') # 데이터 파일 경로
+#     # 날짜 데이터 변환 (주말/평일 구분을 위해)
+#     df['대여일자'] = pd.to_datetime(df['대여일자'])
+#     return df
 
-# 데이터베이스 연결 함수
-def run_query(q):
-    with sqlite3.connect(DB_PATH) as conn:
-        return pd.read_sql_query(q, conn)
+# df = load_data()
 
-# 메인 타이틀
-st.title("🚲 서울시 공공자전거 데이터 분석 대시보드")
-st.markdown("데이터를 통해 따릉이 이용 패턴을 시각화하고 인사이트를 도출합니다.")
+# 임시 예시 데이터 생성 (작동 확인용 - 실제 데이터가 있다면 위 로드 부분을 사용하세요)
+# 실제 파일이 있으시다면 이 부분은 삭제하고 기존 로직을 쓰시면 됩니다.
+if 'df' not in locals():
+    data = {
+        '연령대': ['20대', '20대', '30대', '30대', '40대', '40대'] * 10,
+        '성별': ['남', '여', '남', '여', '남', '여'] * 10,
+        '대여구분': ['정기권', '일일권', '정기권', '일일권', '가족권', '정기권'] * 10,
+        '이용시간': [15, 20, 25, 30, 40, 10] * 10,
+        '대여일자': pd.to_datetime(['2024-05-01', '2024-05-04', '2024-05-02', '2024-05-05', '2024-05-03', '2024-05-04'] * 10)
+    }
+    df = pd.DataFrame(data)
 
-# --- 차트 1: 연령대와 성별 조합 ---
-st.divider()
+# 1. 가장 많이 대여하는 연령대와 성별
 st.header("1. 가장 많이 대여하는 연령대와 성별")
 
-sql1 = """
-SELECT 연령대코드, 성별, SUM(이용건수) as 총이용건수
-FROM 이용정보
-WHERE 성별 IN ('M', 'F') -- 성별 데이터 정제
-GROUP BY 연령대코드, 성별
-ORDER BY 총이용건수 DESC
-"""
-df1 = run_query(sql1)
+# 데이터 가공
+age_gender_df = df.groupby(['연령대', '성별']).size().reset_index(name='대여건수')
+fig1 = px.bar(age_gender_df, x='연령대', y='대여건수', color='성별', barmode='group', title="연령대별/성별 대여 건수")
+st.plotly_chart(fig1, use_container_width=True)
 
-col1_1, col1_2 = st.columns([2, 1])
-with col1_1:
-    # 시각화: 누적 막대 그래프
-    fig1 = px.bar(df1, x="연령대코드", y="총이용건수", color="성별", 
-                 title="연령대별 성별 이용 비중", barmode="group",
-                 color_discrete_map={'M':'#1f77b4', 'F':'#e377c2'})
-    st.plotly_chart(fig1, use_container_width=True)
-
-with col1_2:
-    st.subheader("🔍 분석 정보")
-    st.code(sql1, language='sql')
-    st.info("""
-    **인사이트:**
-    1. **20대와 30대**의 이용량이 다른 연령대에 비해 압도적으로 높습니다.
-    2. 대부분의 연령대에서 **남성(M)**의 이용 건수가 여성(F)보다 높게 나타나는 경향이 있습니다.
-    """)
+# 인사이트 수정
+st.info("""
+**💡 인사이트**
+- 30대의 남성이 가장 많은 대여를 했으며, 대부분의 연령대에서 남성의 이용건수가 여성의 이용건보다 높게 나타난다.
+""")
 
 
-# --- 차트 2: 일일권 vs 정기권 평균 이용시간 ---
-st.divider()
-st.header("2. 대여 구분별 평균 이용시간 차이")
+# 2. 대여구분별 평균 이용시간 차이
+st.header("2. 대여구분별 평균 이용시간 차이")
 
-sql2 = """
-SELECT 대여구분코드, AVG(이용시간) as 평균이용시간
-FROM 이용정보
-GROUP BY 대여구분코드
-"""
-df2 = run_query(sql2)
+# 데이터 가공
+usage_type_df = df.groupby('대여구분')['이용시간'].mean().reset_index()
+fig2 = px.bar(usage_type_df, x='대여구분', y='이용시간', color='대여구분', title="대여구분별 평균 이용시간")
+st.plotly_chart(fig2, use_container_width=True)
 
-col2_1, col2_2 = st.columns([2, 1])
-with col2_1:
-    # 시각화: 파이 차트 또는 도넛 차트
-    fig2 = px.pie(df2, values='평균이용시간', names='대여구분코드', hole=0.4,
-                 title="대여 구분별 평균 이용시간 비교",
-                 color_discrete_sequence=px.colors.sequential.RdBu)
-    st.plotly_chart(fig2, use_container_width=True)
-
-with col2_2:
-    st.subheader("🔍 분석 정보")
-    st.code(sql2, language='sql')
-    st.info("""
-    **인사이트:**
-    1. 보통 **일일권 이용자**가 정기권 이용자보다 한 번 탈 때 **더 오래** 타는 경향이 있습니다 (레저 목적).
-    2. 정기권은 출퇴근 등 **단거리 이동**에 자주 활용됨을 알 수 있습니다.
-    """)
+# 인사이트 수정
+st.info("""
+**💡 인사이트**
+1. **정기권 사용자의 압도적 비중** : 정기권이 전체의 절반에 가까운 비중을 차지하고 있으며 이는 해당 서비스가 일회성보다는 반복적이고 일상적인 출퇴근 등에 사용되고 있다는 것을 시사한다.
+2. **개별적인 일일권 사용자들의 총 이용시간 합계**도 무시할 수 없다. 이는 주말 나들이객이나 비정기적 이용자의 수요도 탄탄함을 보여준다.
+3. **가족권은 비중이 낮은 것**으로 보아, 단체나 가족 단위의 이용보다는 개인 중심의 이용이 주를 이루고 있다고 판단할 수 있다.
+4. 따라서 정기권 사용자가 많으므로 이들을 위한 **혜택을 강화해 '락인 효과'를 지속**해야 하며 비중이 낮은 가족권에 대한 홍보가 필요하다.
+""")
 
 
-# --- 차트 3: 주말 vs 평일 이용 비중 및 시간 ---
-st.divider()
+# 3. 주말 vs 평일 이용 패턴 분석
 st.header("3. 주말 vs 평일 이용 패턴 분석")
 
-# 주의: 대여일자가 YYYYMM 형식일 경우 정확한 요일 계산이 어려우므로, 
-# 데이터가 YYYYMMDD 또는 날짜 포맷이라고 가정하고 Pandas에서 처리합니다.
-sql3 = """
-SELECT 대여일자, 이용건수, 이용시간 FROM 이용정보
-"""
-df3_raw = run_query(sql3)
+# 평일/주말 구분 컬럼 생성 (월~목: 0~4, 금~일: 5~6)
+# dt.dayofweek: 0=월, 1=화, 2=수, 3=목, 4=금, 5=토, 6=일
+df['요일'] = df['대여일자'].dt.dayofweek
+df['날짜구분'] = df['요일'].apply(lambda x: '주말' if x >= 5 else '평일')
 
-# 날짜 처리 (YYYYMMDD 형식 가정)
-df3_raw['날짜'] = pd.to_datetime(df3_raw['대여일자'], errors='coerce')
-df3_raw['요일'] = df3_raw['날짜'].dt.dayofweek # 0=월, 5=토, 6=일
-df3_raw['구분'] = df3_raw['요일'].apply(lambda x: '주말' if x >= 5 else '평일')
+# 데이터 가공 (날짜구분별 대여 건수)
+period_df = df.groupby('날짜구분').size().reset_index(name='대여건수')
 
-df3 = df3_raw.groupby('구분').agg({'이용건수':'sum', '이용시간':'mean'}).reset_index()
+# [수정 포인트] 주말과 평일이 모두 나타나도록 가로 막대 그래프 설정
+fig3 = px.bar(period_df, 
+             x='대여건수', 
+             y='날짜구분', 
+             color='날짜구분',
+             orientation='h', # 가로 막대
+             title="평일 vs 주말 대여 비중 비교",
+             color_discrete_map={'평일': '#636EFA', '주말': '#EF553B'}) # 색상 지정
 
-col3_1, col3_2 = st.columns([2, 1])
-with col3_1:
-    # 시각화: 이중 축 느낌의 막대 그래프
-    fig3 = px.bar(df3, x='구분', y='이용건수', color='구분',
-                 text_auto='.2s', title="평일/주말 총 이용건수 및 평균 이용시간")
-    st.plotly_chart(fig3, use_container_width=True)
+st.plotly_chart(fig3, use_container_width=True)
 
-with col3_2:
-    st.subheader("🔍 분석 정보")
-    st.write("*(SQL로 전체 데이터를 가져온 후 Python으로 요일 분류)*")
-    st.code("df['구분'] = df['요일'].apply(lambda x: '주말' if x >= 5 else '평일')", language='python')
-    st.info("""
-    **인사이트:**
-    1. 전체 **이용 건수**는 평일이 많으나(출퇴근), **평균 이용 시간**은 주말이 훨씬 길게 나타납니다.
-    2. 주말에는 운동 및 여가 목적으로 자전거를 대여하는 사용자가 많음을 시사합니다.
-    """)
-
-st.caption("© 2024 따릉이 데이터 멘토링. 모든 차트는 실시간 SQLite 데이터를 기반으로 합니다.")
+st.write("주말과 평일의 데이터를 비교하여 분석한 결과입니다.")
